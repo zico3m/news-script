@@ -1,0 +1,6 @@
+joblib
+feedparser
+requests
+beautifulsoup4
+supabase
+scikit-learn
