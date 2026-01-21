@@ -17,7 +17,7 @@ SUPABASE_URL = os.getenv(
 )
 SUPABASE_KEY = os.getenv(
     "SUPABASE_KEY",
-    "sb_publishable_eSz6tnpyIjCOPk9Z_OoCtw_vZieZWm9"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vcGh5ZXRjcml0bGd1b3N0ZnNoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzIyMjEwOCwiZXhwIjoyMDc4Nzk4MTA4fQ.Qp__xP_xX_b2TfwBNZ5TK666zjtd7Yr5Yjp48DOtkmY"
 )
 
 MODEL_PATH = "news_model.pkl"
