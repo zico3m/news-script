@@ -1,6 +1,5 @@
 import os
 import re
-import joblib
 import feedparser
 import requests
 from bs4 import BeautifulSoup
@@ -8,34 +7,56 @@ from datetime import datetime, timezone
 from supabase import create_client
 
 # =============================
-# CONFI
+# CONFIG
 # =============================
 
 SUPABASE_URL = os.getenv(
     "SUPABASE_URL",
     "https://nophyetcritlguostfsh.supabase.co"
 )
-# SUPABASE_KEY = os.getenv(
-#     "SUPABASE_KEY",
-#     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vcGh5ZXRjcml0bGd1b3N0ZnNoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzIyMjEwOCwiZXhwIjoyMDc4Nzk4MTA4fQ.Qp__xP_xX_b2TfwBNZ5TK666zjtd7Yr5Yjp48DOtkmY"
-# )
 
-MODEL_PATH = "news_model.pkl"
-VECTORIZER_PATH = "vectorizer.pkl"
+SUPABASE_KEY = os.getenv(
+    "SUPABASE_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5vcGh5ZXRjcml0bGd1b3N0ZnNoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzIyMjEwOCwiZXhwIjoyMDc4Nzk4MTA4fQ.Qp__xP_xX_b2TfwBNZ5TK666zjtd7Yr5Yjp48DOtkmY"
+)
+
+# 🔥 HuggingFace API
+HF_API_URL = "https://zicosulatn-arabic-news-api.hf.space/api/predict"
 
 RSS_SOURCES = {
 
+    # 🌍 إخبارية عامة
     "BBC Arabic": "https://feeds.bbci.co.uk/arabic/rss.xml",
     "France24 Arabic": "https://www.france24.com/ar/rss",
-    "Alsharq (Qatar)": "https://al-sharq.com/rss/latestNews",
     "RT Arabic": "https://arabic.rt.com/rss/",
+    "Alsharq (Qatar)": "https://al-sharq.com/rss/latestNews",
+
+    # 🇪🇬 مصر
     "Al-Masry Al-Youm": "https://almasryalyoum.com/rss/rssfeed",
-    "Al Jadeed TV": "https://www.aljadeed.tv/rss",
     "Masrawy": "https://www.masrawy.com/rss",
+
+    # 🇱🇧 الأردن / لبنان
+    "Al Jadeed TV": "https://www.aljadeed.tv/rss",
     "SarayNews": "https://www.sarayanews.com/rss.php",
+
+    # 🇾🇪 اليمن
+    "Yemenat News": "https://yemenat.net/feed",
+    "Yemen Voice": "https://ye-voice.com/rss.php?cat=5",
+    "Yemen Saeed": "https://yemen-saeed.com/rss.php?cat=1",
+
+    # 🇸🇦 السعودية
+    "Okaz": "https://www.okaz.com.sa/rss",
+    "Al Madina": "https://al-madina.com/rssFeed/193",
+    "Al Bilad": "https://albiladdaily.com/feed",
+    "Arab News": "https://www.arabnews.com/rss",
+
+    # ⚽ رياضة
+    "Kooora": "https://www.kooora.com/rss",
+    "FilGoal": "https://www.filgoal.com/rss",
+    "YallaKora": "https://www.yallakora.com/rss",
+    "beIN Sports Arabic": "https://www.beinsports.com/ar/rss",
 }
 
-# التصنيفات المعتمدة (كما في قاعدة البيانات)
 ALLOWED_CATEGORIES = {
     "politics": 1,
     "sports": 2,
@@ -45,15 +66,12 @@ ALLOWED_CATEGORIES = {
     "culture": 6,
 }
 
-# Mapping مسموح
 CATEGORY_MAPPING = {
     "tech": "technology",
     "technology": "technology",
-
     "finance": "economy",
     "economics": "economy",
     "economy": "economy",
-
     "politics": "politics",
     "sports": "sports",
     "health": "health",
@@ -64,13 +82,13 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (NabaAI Bot)"
 }
 
+MAX_CHARS = 2000  # لتسريع إرسال النص إلى API
+
 # =============================
 # INIT
 # =============================
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-model = joblib.load(MODEL_PATH)
-vectorizer = joblib.load(VECTORIZER_PATH)
 
 # =============================
 # HELPERS
@@ -83,9 +101,30 @@ def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
+# 🔥 التصنيف عبر HuggingFace API
 def classify(text: str) -> str:
-    vec = vectorizer.transform([text])
-    return model.predict(vec)[0].lower().strip()
+    try:
+        short_text = text[:MAX_CHARS]
+
+        response = requests.post(
+            HF_API_URL,
+            json={"text": short_text},
+            timeout=30
+        )
+
+        response.raise_for_status()
+        data = response.json()
+
+        prediction = data.get("prediction") or data.get("label")
+
+        if not prediction:
+            return "unknown"
+
+        return prediction.lower().strip()
+
+    except Exception as e:
+        print("⚠️ HF API classification failed:", e)
+        return "unknown"
 
 def already_exists(title: str) -> bool:
     res = supabase.table("news") \
@@ -113,7 +152,7 @@ def get_or_create_source(name: str) -> int:
     return ins.data[0]["id"]
 
 # =============================
-# FULL ARTICLE SCRAPER
+# ARTICLE SCRAPER
 # =============================
 
 def fetch_full_article(url: str):
@@ -164,11 +203,9 @@ def main():
             predicted_raw = classify(content)
             mapped_category = CATEGORY_MAPPING.get(predicted_raw)
 
-            # الافتراضي: قيد المراجعة
             status = "pending"
             category_id = None
 
-            # إذا التصنيف معروف → نشر مباشر
             if mapped_category and mapped_category in ALLOWED_CATEGORIES:
                 category_id = ALLOWED_CATEGORIES[mapped_category]
                 status = "published"
@@ -177,9 +214,9 @@ def main():
                 "title": title,
                 "content": content,
                 "primary_image": image_url,
-                "category_id": category_id,   # قد تكون NULL
+                "category_id": category_id,
                 "source_id": source_id,
-                "status": status,             # published أو pending
+                "status": status,
                 "is_external": True,
                 "published_at": now_utc(),
             }).execute()
