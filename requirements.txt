@@ -4,3 +4,7 @@ requests
 beautifulsoup4
 supabase
 scikit-learn
+feedparser
+requests
+beautifulsoup4
+supabase
